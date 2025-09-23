@@ -14,6 +14,13 @@ text = page.get_text()
 page_dict = page.get_text("dict")
 blocks = page.get_text("blocks")
 
+# Find numbers from document
+numbers = re.findall(r"\d+", text)
+numbers = [int(n) for n in numbers]
+refined_numbers = numbers[37:]
+
+# print(refined_numbers)
+
 # Define School object class
 class School:
      def __init__(self, name, is_both, data_list):
@@ -46,12 +53,25 @@ if page_dict and "blocks" in page_dict and len(page_dict["blocks"]) > 0:
     school_name = first_line_text
 print(f"School Name: {school_name}")
 
-# Find numbers from document
-numbers = re.findall(r"\d+", text)
-numbers = [int(n) for n in numbers]
-refined_numbers = numbers[37:]
+# Initialize is_both referring to ES and HS
+is_both = False
+es_and_hs_schools = [
+    "Arts and College Preparatory Academy",
+    "Columbus Arts and Tech Academy",
+    "Columbus Preparatory Academy",
+    "Great River Connections Academy",
+    "Northeast Ohio College Preparatory School",
+    "Ohio Connections Academy",
+    "Ohio Virtual Academy",
+    "Wildwood Environmental Academy",
+    # "Brian's Sample School"
+]
 
-# print(refined_numbers)
+# Set is_both to True if school name is found in list
+if school_name in es_and_hs_schools:
+     is_both = True
+
+print(is_both)
 
 # Index label objects 
 index_labels = [
@@ -85,15 +105,3 @@ for obj in target_field_list:
      label = obj["label"]
      value = obj["value"]
      print(f"{label}: {value}")
-
-
-es_and_hs_schools = [
-    "Arts and College Preparatory Academy",
-    "Columbus Arts and Tech Academy",
-    "Columbus Preparatory Academy",
-    "Great River Connections Academy",
-    "Northeast Ohio College Preparatory School",
-    "Ohio Connections Academy",
-    "Ohio Virtual Academy",
-    "Wildwood Environmental Academy"
-]
