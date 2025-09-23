@@ -6,6 +6,7 @@ from openpyxl import load_workbook
 
 BASE_DIR = Path(__file__).parent
 PDF_PATH = BASE_DIR / "files" / "BRIAN School Leader Monthly Report 2025-26.pdf"
+OUT_PATH = Path("test.xlsx")
 
 doc =  pymupdf.open(PDF_PATH)
 
@@ -108,13 +109,6 @@ for obj in school.data_list:
      value = obj["value"]
      print(f"{label}: {value}")
 
-# Create a new workbook and active sheet
-new_workbook = Workbook()
-new_sheet = new_workbook.active
-new_sheet.title = "Test"
-
-new_sheet.append(["School","Students", "Teachers", "Sub", "OSS", "EX", "ER", "MDM"])
-
 # Return blank if value is zero
 def _blank_if_zero(v):
     """Return None (blank) for 0/ '0'/ None; else return v."""
@@ -195,5 +189,24 @@ def build_rows_for_school(school):
 
     return rows
 
+COLUMNS = ["School", "Students", "Teachers", "Sub", "OSS", "EX", "ER", "MDM"]
 
-new_workbook.save("test.xlsx")
+def append_rows_to_excel(rows, path=OUT_PATH):
+    # Create file if needed then append rows
+    if not path.exists():
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Data"
+        ws.append(COLUMNS)
+    else:
+        wb = load_workbook(path)
+        ws = wb.active
+
+    for r in rows:
+        ws.append([r.get(col) for col in COLUMNS])
+
+    wb.save(path)
+    print(f"Appended {len(rows)} row(s) → {path}")
+
+rows = build_rows_for_school(school)
+append_rows_to_excel(rows)
