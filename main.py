@@ -14,6 +14,13 @@ text = page.get_text()
 page_dict = page.get_text("dict")
 blocks = page.get_text("blocks")
 
+# Define School object class
+class School:
+     def __init__(self, name, is_both, data_list):
+          self.name = name
+          self.is_both = is_both
+          self.data_list = data_list
+
 # Locate school name 
 """""
 for block in blocks:
@@ -81,5 +88,12 @@ for obj in target_field_list:
 
 
 es_and_hs_schools = [
-
+    "Arts and College Preparatory Academy",
+    "Columbus Arts and Tech Academy",
+    "Columbus Preparatory Academy",
+    "Great River Connections Academy",
+    "Northeast Ohio College Preparatory School",
+    "Ohio Connections Academy",
+    "Ohio Virtual Academy",
+    "Wildwood Environmental Academy"
 ]
