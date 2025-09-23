@@ -51,7 +51,6 @@ if page_dict and "blocks" in page_dict and len(page_dict["blocks"]) > 0:
         for span in first_line["spans"]:
                 first_line_text += span["text"]
     school_name = first_line_text
-print(f"School Name: {school_name}")
 
 # Initialize is_both referring to ES and HS
 is_both = False
@@ -71,7 +70,6 @@ es_and_hs_schools = [
 if school_name in es_and_hs_schools:
      is_both = True
 
-print(is_both)
 
 # Index label objects 
 index_labels = [
@@ -100,8 +98,11 @@ for i in index_labels:
     # Add object to list 
     target_field_list.append(field_object) 
 
-# print target labels 
-for obj in target_field_list:
+
+school = School(school_name, is_both, target_field_list)
+print(school.name)
+print(f"ES and HS ? : {school.is_both}")
+for obj in school.data_list:
      label = obj["label"]
      value = obj["value"]
      print(f"{label}: {value}")
