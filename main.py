@@ -61,12 +61,24 @@ index_labels = [
     {"label": "MDM", "index_value": 14},
 ]
 
-# Print target fields labels and values
+# Create target field list with labels and ref indexes
+target_field_list = []
 for i in index_labels:
     label = i["label"]
     index = i["index_value"]
     value = refined_numbers[index]
-    print(f"{label}: {value}")
+
+    # Create object with label and target value
+    field_object = {"label": label, "value": value}
+    # Add object to list 
+    target_field_list.append(field_object) 
+
+# print target labels 
+for obj in target_field_list:
+     label = obj["label"]
+     value = obj["value"]
+     print(f"{label}: {value}")
+
 
 es_and_hs_schools = [
 
