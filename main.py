@@ -1,7 +1,8 @@
 import re
 from pymupdf import pymupdf
 from pathlib import Path
-
+from openpyxl import Workbook
+from openpyxl import load_workbook
 
 BASE_DIR = Path(__file__).parent
 PDF_PATH = BASE_DIR / "files" / "BRIAN School Leader Monthly Report 2025-26.pdf"
@@ -98,7 +99,7 @@ for i in index_labels:
     # Add object to list 
     target_field_list.append(field_object) 
 
-
+# Create school object and print data
 school = School(school_name, is_both, target_field_list)
 print(school.name)
 print(f"ES and HS ? : {school.is_both}")
@@ -106,3 +107,93 @@ for obj in school.data_list:
      label = obj["label"]
      value = obj["value"]
      print(f"{label}: {value}")
+
+# Create a new workbook and active sheet
+new_workbook = Workbook()
+new_sheet = new_workbook.active
+new_sheet.title = "Test"
+
+new_sheet.append(["School","Students", "Teachers", "Sub", "OSS", "EX", "ER", "MDM"])
+
+# Return blank if value is zero
+def _blank_if_zero(v):
+    """Return None (blank) for 0/ '0'/ None; else return v."""
+    if v is None:
+        return None
+    try:
+        return None if int(v) == 0 else v
+    except Exception:
+        return v
+    
+# Method for retriving label values from school data list
+def _get(school, label):
+    for d in school.data_list:
+        if d.get("label") == label:
+            return d.get("value")
+    return None
+
+def build_rows_for_school(school):
+    rows = []
+
+    # pull all values
+    name = school.name
+    sub        = _blank_if_zero(_get(school, "Sub"))
+
+    # K-8
+    k8_students = _blank_if_zero(_get(school, "SWD K-8"))
+    k8_teachers = _blank_if_zero(_get(school, "IS K-8"))
+    k8_oss      = _blank_if_zero(_get(school, "OSS K-8"))
+    k8_ex       = _blank_if_zero(_get(school, "EX K-8"))
+
+    # 9-12
+    hs_students = _blank_if_zero(_get(school, "SWD 9-12"))
+    hs_teachers = _blank_if_zero(_get(school, "IS 9-12"))
+    hs_oss      = _blank_if_zero(_get(school, "OSS 9-12"))
+    hs_ex       = _blank_if_zero(_get(school, "EX 9-12"))
+
+    er  = _blank_if_zero(_get(school, "ER"))
+    mdm = _blank_if_zero(_get(school, "MDM"))
+
+    # Verify ES or HS from values
+    is_es = any(v is not None for v in [k8_students, k8_teachers, k8_oss, k8_ex])
+    is_hs = any(v is not None for v in [hs_students, hs_teachers, hs_oss, hs_ex])
+
+    # Conditional check for ES, HS, or BOTH 
+    if school.is_both or (is_es and is_hs):
+        rows.append({
+            "School": name + " ES", 
+            "Students": k8_students, "Teachers": k8_teachers, "Sub": sub,
+            "OSS": k8_oss, "EX": k8_ex, "ER": er, "MDM": mdm,
+        })
+        rows.append({
+            "School": name + " HS",
+            "Students": hs_students, "Teachers": hs_teachers, "Sub": sub,
+            "OSS": hs_oss, "EX": hs_ex, "ER": er, "MDM": mdm,
+        })
+    else:
+        # Only ES data present → single ES row
+        if is_es and not is_hs:
+            rows.append({
+                "School": name, "Level": "ES",
+                "Students": k8_students, "Teachers": k8_teachers, "Sub": sub,
+                "OSS": k8_oss, "EX": k8_ex, "ER": er, "MDM": mdm,
+            })
+        # Only HS data present → single HS row
+        elif is_hs and not is_es:
+            rows.append({
+                "School": name, "Level": "HS",
+                "Students": hs_students, "Teachers": hs_teachers, "Sub": sub,
+                "OSS": hs_oss, "EX": hs_ex, "ER": er, "MDM": mdm,
+            })
+        else:
+            # No level data — still write a single blank row for visibility
+            rows.append({
+                "School": name, "Level": "ES" if not school.is_both else "ES",
+                "Students": None, "Teachers": None, "Sub": sub,
+                "OSS": None, "EX": None, "ER": er, "MDM": mdm,
+            })
+
+    return rows
+
+
+new_workbook.save("test.xlsx")
