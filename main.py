@@ -11,6 +11,33 @@ doc =  pymupdf.open(PDF_PATH)
 # Pull text from first page of file
 page = doc[0]
 text = page.get_text()
+page_dict = page.get_text("dict")
+blocks = page.get_text("blocks")
+
+# Locate school name 
+"""""
+for block in blocks:
+    x0, y0, x1, y1, text_content, block_no, block_type = block
+    if block_no == 17: # School name is in block 17
+        print(f"Block {block_no}:")
+        print(f"  Text: {text_content}")
+        print("-" * 20)
+"""
+
+# Extract first line of school name block
+first_line_text = ""
+school_name = ""
+if page_dict and "blocks" in page_dict and len(page_dict["blocks"]) > 0:
+    target_block = page_dict["blocks"][18] # School name is in block 17
+
+    if "lines" in target_block and len(target_block["lines"]) > 0:
+        first_line = target_block["lines"][0] # Get the first line of that block
+
+        # Concatenate spans to get the full line text
+        for span in first_line["spans"]:
+                first_line_text += span["text"]
+    school_name = first_line_text
+print(f"School Name: {school_name}")
 
 # Find numbers from document
 numbers = re.findall(r"\d+", text)
@@ -40,3 +67,7 @@ for i in index_labels:
     index = i["index_value"]
     value = refined_numbers[index]
     print(f"{label}: {value}")
+
+es_and_hs_schools = [
+
+]
