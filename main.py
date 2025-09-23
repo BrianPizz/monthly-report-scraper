@@ -1,3 +1,4 @@
+import re
 from pymupdf import pymupdf
 from pathlib import Path
 
@@ -11,4 +12,8 @@ page = doc[0]
 
 text = page.get_text()
 
-print(text)
+# Find numbers from document
+numbers = re.findall(r"\d+", text)
+numbers = [int(n) for n in numbers]
+
+print(numbers)
