@@ -1,0 +1,36 @@
+# School data directories
+SeptemberMR2025/
+files/
+*/MR2025/
+*/MR2026/
+
+# Excel output files
+test.xlsx
+*.xlsx
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
