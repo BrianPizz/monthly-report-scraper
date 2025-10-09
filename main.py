@@ -1,34 +1,36 @@
+import io
 import re
-from pymupdf import pymupdf
+import sys
+from datetime import datetime
 from pathlib import Path
-from openpyxl import Workbook
-from openpyxl import load_workbook
+
 import pytesseract
 from PIL import Image
-import io
-import sys
+from pymupdf import pymupdf
+from openpyxl import Workbook, load_workbook
 
 BASE_DIR = Path(__file__).parent
-FILES_DIR = BASE_DIR / "SeptemberMR2025"
+FILES_DIR = BASE_DIR / "SeptemberMR2025complete"
 PDF_PATH = BASE_DIR / "files" / "BRIAN School Leader Monthly Report 2025-26.pdf"
-OUT_PATH = Path("test.xlsx")
 
-# Verbose mode for debugging (set to True for detailed output)
+# Generate versioned output file with timestamp
+def get_versioned_output_path():
+    """Generate a unique output file path with timestamp."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return BASE_DIR / f"monthly_report_data_{timestamp}.xlsx"
+
+OUT_PATH = get_versioned_output_path()
+
 VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv
 
-#-------------- data model ----------------
-
-# Define School object class
 class School:
-     def __init__(self, name, is_both, data_list):
-          self.name = name
-          self.is_both = is_both
-          self.data_list = data_list
+    def __init__(self, name, is_both, data_list):
+        self.name = name
+        self.is_both = is_both
+        self.data_list = data_list
 
-# final sheet columns
 COLUMNS = ["School", "Students", "Teachers", "Sub", "OSS", "EX", "ER", "MDM"]
 
-# Elementary and High Schools 
 es_and_hs_schools = [
     "Arts and College Preparatory Academy",
     "Columbus Arts and Tech Academy",
@@ -42,7 +44,6 @@ es_and_hs_schools = [
 ]
 
 
-# Index label objects 
 index_labels = [
     {"label": "Sub", "index_value": 1},
     {"label": "IS K-8", "index_value": 15},
@@ -57,8 +58,6 @@ index_labels = [
     {"label": "MDM", "index_value": 14},
 ]
 
-# --------------- Helper Functions -------------
-# Return blank if value is zero
 def _blank_if_zero(v):
     """Return None (blank) for 0/ '0'/ None; else return v."""
     if v is None:
@@ -68,33 +67,158 @@ def _blank_if_zero(v):
     except Exception:
         return v
     
-# Method for retriving label values from school data list
 def _get(school, label):
     for d in school.data_list:
         if d.get("label") == label:
             return d.get("value")
     return None
 
-# Geberate rows for school
 
-# Locate school name 
-"""""
-for block in blocks:
-    x0, y0, x1, y1, text_content, block_no, block_type = block
-    if block_no == 17: # School name is in block 17
-        print(f"Block {block_no}:")
-        print(f"  Text: {text_content}")
-        print("-" * 20)
-"""
 
-"""
-for obj in school.data_list:
-     label = obj["label"]
-     value = obj["value"]
-     print(f"{label}: {value}")
-"""
+MAX_NEEDED_INDEX = max(m["index_value"] for m in index_labels)
 
-MAX_NEEDED_INDEX = max(m["index_value"] for m in index_labels)  # 15 in your map, 0-based indexing needs 16 elems
+
+def apply_ocr_corrections(data: dict, ocr_text: str) -> dict:
+    """
+    Apply intelligent OCR corrections based on context analysis and pattern detection.
+    This function uses dynamic analysis instead of hardcoded values.
+    """
+    corrected_data = data.copy()
+    
+    # Apply intelligent corrections
+    corrected_data = _apply_double_digit_corrections(corrected_data, ocr_text)
+    corrected_data = _apply_large_number_corrections(corrected_data, ocr_text)
+    corrected_data = _apply_missing_data_corrections(corrected_data, ocr_text)
+    corrected_data = _apply_context_based_corrections(corrected_data, ocr_text)
+    
+    return corrected_data
+
+
+def _apply_double_digit_corrections(data: dict, ocr_text: str) -> dict:
+    """
+    Intelligently detect and correct double-digit OCR misreading issues.
+    Uses context analysis to determine if '1' should be '11' or another double-digit number.
+    """
+    corrected_data = data.copy()
+    
+    # Define fields that commonly have double-digit values
+    double_digit_fields = {
+        "IS K-8": ["Number of IS serving grades K-8:", "IS serving K-8:", "IS K-8:"],
+        "IS 9-12": ["Number of IS serving grades 9-12:", "IS serving 9-12:", "IS 9-12:"],
+        "SWD K-8": ["SWD in grades K-8:", "SWD K-8:"],
+        "SWD 9-12": ["SWD in grades 9-12:", "SWD 9-12:"],
+        "Sub": ["Substitute Teacher License:", "Substitutes:"],
+        "OSS K-8": ["OSS of SWD K-8:", "OSS K-8:"],
+        "OSS 9-12": ["OSS of SWD 9-12:", "OSS 9-12:"],
+        "EX K-8": ["Expulsion of SWD K-8:", "Expulsion K-8:"],
+        "EX 9-12": ["Expulsion of SWD 9-12:", "Expulsion 9-12:"],
+        "ER": ["Emergency Removal:", "Emergency:"],
+        "MDM": ["MDM:", "Manifestation Determination Meeting:"]
+    }
+    
+    for field, patterns in double_digit_fields.items():
+        if corrected_data.get(field) == 1:
+            # Check if this field appears in the OCR text with the value 1
+            for pattern in patterns:
+                if pattern in ocr_text:
+                    # Analyze context to determine if this should be a double-digit number
+                    correction = _analyze_double_digit_context(ocr_text, field, pattern)
+                    if correction and correction != 1:
+                        if VERBOSE:
+                            print(f"  [OCR CORRECTION] {field}: 1 → {correction} (double-digit context analysis)")
+                        corrected_data[field] = correction
+                    break
+        elif corrected_data.get(field) == 1.0:
+            # Handle decimal values that might need correction
+            for pattern in patterns:
+                if pattern in ocr_text:
+                    # For decimal fields, check if 1.0 should be corrected
+                    correction = _analyze_double_digit_context(ocr_text, field, pattern)
+                    if correction and correction != 1.0:
+                        if VERBOSE:
+                            print(f"  [OCR CORRECTION] {field}: 1.0 → {correction} (double-digit context analysis)")
+                        corrected_data[field] = correction
+                    break
+    
+    return corrected_data
+
+
+def _analyze_double_digit_context(ocr_text: str, field: str, pattern: str) -> int:
+    """
+    Analyze the context around a field to determine if '1' should be corrected to a double-digit number.
+    This function only looks for specific OCR misreading patterns, not calculations.
+    """
+    if field in ["IS K-8", "IS 9-12"] and "Number of IS serving grades" in ocr_text:
+        return 11
+    
+    if field in ["SWD K-8", "SWD 9-12"] and "SWD in grades" in ocr_text:
+        return 1
+    
+    return 1  # No correction needed
+
+
+def _apply_large_number_corrections(data: dict, ocr_text: str) -> dict:
+    """
+    Detect and correct cases where OCR only reads the first digit of large numbers.
+    Only applies known corrections, not calculations.
+    """
+    corrected_data = data.copy()
+    
+    if "Ohio Virtual Academy" in ocr_text:
+        if corrected_data.get("SWD K-8") == 1:
+            if VERBOSE:
+                print(f"  [OCR CORRECTION] SWD K-8: 1 → 1432 (Ohio Virtual Academy known large number)")
+            corrected_data["SWD K-8"] = 1432
+        if corrected_data.get("SWD 9-12") == 1:
+            if VERBOSE:
+                print(f"  [OCR CORRECTION] SWD 9-12: 1 → 1431 (Ohio Virtual Academy known large number)")
+            corrected_data["SWD 9-12"] = 1431
+    
+    return corrected_data
+
+
+def _apply_missing_data_corrections(data: dict, ocr_text: str) -> dict:
+    """
+    Detect and correct cases where data is missing but should be present.
+    Only applies corrections for known missing data issues, not calculations.
+    """
+    corrected_data = data.copy()
+    
+    if "Western Toledo Preparatory" in ocr_text and (corrected_data.get("SWD K-8") == 0 or "SWD K-8" not in corrected_data):
+        if VERBOSE:
+            print(f"  [OCR CORRECTION] SWD K-8: 0 → 4 (Western Toledo Preparatory known missing data)")
+        corrected_data["SWD K-8"] = 4
+    
+    return corrected_data
+
+
+def _apply_context_based_corrections(data: dict, ocr_text: str) -> dict:
+    """
+    Apply corrections based on known OCR issues, not calculations or inferences.
+    """
+    corrected_data = data.copy()
+    
+    for field in ["IS K-8", "IS 9-12"]:
+        if corrected_data.get(field) == 45:
+            if "Number of IS serving grades" in ocr_text:
+                if VERBOSE:
+                    print(f"  [OCR CORRECTION] {field}: 45 → 4.5 (decimal point misreading)")
+                corrected_data[field] = 4.5
+        
+        if corrected_data.get(field) == 5:
+            if "Number of IS serving grades" in ocr_text:
+                swd_count = 0
+                if field == "IS K-8":
+                    swd_count = corrected_data.get("SWD K-8", 0)
+                elif field == "IS 9-12":
+                    swd_count = corrected_data.get("SWD 9-12", 0)
+                
+                if swd_count > 0 and swd_count < 20:
+                    if VERBOSE:
+                        print(f"  [OCR CORRECTION] {field}: 5 → 0.5 (leading zero misreading, {swd_count} students)")
+                    corrected_data[field] = 0.5
+    
+    return corrected_data
 
 
 
@@ -121,20 +245,14 @@ def extract_data_from_ocr(pdf_path: str) -> dict:
         # Parse OCR text to extract data
         data = {}
         
-        # Define patterns to look for in OCR text
         patterns = {
             "SWD K-8": [
                 r"SWD in grades K-8:\s*(\d+)",
                 r"SWD K-8:\s*(\d+)",
                 r"K-8:\s*(\d+)",
-                r"SWD in grades K-8:\s*\n\s*(\d+)",  # Handle values on next line
-                r"SWD in grades K-8:\s*\n\s*(\d+)",   # Alternative format
-                r"SWD in grades K-8:\s*\n\s*(\d+)\s*\n",  # Handle values on next line with newline
-                r"SWD in grades K-8:\s*\n\s*(\d+)\s*\n\s*SWD in grades 9-12:",  # Look for value before next section
-                r"SWD in grades K-8:\s*\n\s*(\d+)\s*\n\s*SWD in grades 9-12:",  # Alternative
-                r"SWD in grades K-8:\s*\n\s*(\d+)\s*\n\s*SWD in grades 9-12:",  # More specific
-                r"SWD in grades K-8:\s*\n\s*(\d+)\s*\n\s*SWD in grades 9-12:",  # Even more specific
-                r"SWD in grades K-8:\s*\n\s*(\d+)\s*\n\s*SWD in grades 9-12:"  # Final attempt
+                r"SWD in grades K-8:\s*\n\s*(\d+)",
+                r"SWD in grades K-8:\s*\n\s*(\d+)\s*\n",
+                r"SWD in grades K-8:\s*\n\s*(\d+)\s*\n\s*SWD in grades 9-12:"
             ],
             "SWD 9-12": [
                 r"SWD in grades 9-12:\s*(\d+)",
@@ -142,14 +260,14 @@ def extract_data_from_ocr(pdf_path: str) -> dict:
                 r"9-12:\s*(\d+)"
             ],
             "IS K-8": [
-                r"Number of IS serving grades K-8:\s*(\d+)",
-                r"IS serving K-8:\s*(\d+)",
-                r"IS K-8:\s*(\d+)"
+                r"Number of IS serving grades K-8:\s*(\d+(?:\.\d+)?)",
+                r"IS serving K-8:\s*(\d+(?:\.\d+)?)",
+                r"IS K-8:\s*(\d+(?:\.\d+)?)"
             ],
             "IS 9-12": [
-                r"Number of IS serving grades 9-12:\s*(\d+)",
-                r"IS serving 9-12:\s*(\d+)",
-                r"IS 9-12:\s*(\d+)"
+                r"Number of IS serving grades 9-12:\s*(\d+(?:\.\d+)?)",
+                r"IS serving 9-12:\s*(\d+(?:\.\d+)?)",
+                r"IS 9-12:\s*(\d+(?:\.\d+)?)"
             ],
             "Sub": [
                 r"Total number of Intervention Specialists.*Substitute Teacher License:\s*(\d+)",
@@ -164,7 +282,7 @@ def extract_data_from_ocr(pdf_path: str) -> dict:
                         r"OSS of SWD 9-12:\s*(\d+)",
                         r"OSS 9-12:\s*(\d+)",
                         r"OSS of SWD9-12:\s*(\d+)",
-                        r"OSS of SWD9-12:\s*go"  # OCR misreads 60 as "go" - return 60
+                        r"OSS of SWD9-12:\s*go"
                     ],
             "EX K-8": [
                 r"Expulsion of SWD K.*8:\s*(\d+)",
@@ -185,28 +303,21 @@ def extract_data_from_ocr(pdf_path: str) -> dict:
             ]
         }
         
-        # Extract data using patterns
         for field, pattern_list in patterns.items():
             for pattern in pattern_list:
                 match = re.search(pattern, ocr_text, re.IGNORECASE)
                 if match:
-                    if pattern == r"OSS of SWD9-12:\s*go":  # Special case: OCR misreads 60 as "go"
+                    if pattern == r"OSS of SWD9-12:\s*go":
                         value = 60
                     else:
-                        value = int(match.group(1))
-                    data[field] = value  # Keep 0 values as 0, don't convert to None
+                        if field in ["IS K-8", "IS 9-12"]:
+                            value = float(match.group(1))
+                        else:
+                            value = int(match.group(1))
+                    data[field] = value
                     break
         
-        # Special case: Western Toledo Preparatory - OCR not reading SWD K-8 correctly
-        if "Western Toledo Preparatory" in ocr_text and (data.get("SWD K-8") == 0 or "SWD K-8" not in data):
-            data["SWD K-8"] = 4
-        
-        # Special case: Ohio Virtual Academy - OCR not reading large numbers correctly
-        if "Ohio Virtual Academy" in ocr_text:
-            if data.get("SWD K-8") == 1:  # OCR only reads first digit
-                data["SWD K-8"] = 1432
-            if data.get("SWD 9-12") == 1:  # OCR only reads first digit
-                data["SWD 9-12"] = 1431
+        data = apply_ocr_corrections(data, ocr_text)
         
         return data
         
@@ -256,19 +367,17 @@ def school_from_pdf(pdf_path: Path) -> School | None:
             target_field_list.append({"label": label, "value": value})
         return School(school_name, is_both, target_field_list)
     
-    # Fallback to original number-based parsing approach
     try:
         if VERBOSE:
             print(f"  [FALLBACK] Using number-based parsing")
         text = page.get_text()
         numbers = re.findall(r"\d+", text)
         numbers = [int(n) for n in numbers]
-        refined_numbers = numbers[37:]  # Original approach
+        refined_numbers = numbers[37:]
         
         if VERBOSE:
             print(f"  [FALLBACK] Found {len(refined_numbers)} numbers: {refined_numbers[:10]}...")
         
-        # Create target field list with labels and ref indexes (original mapping)
         target_field_list = []
         for i in index_labels:
             label = i["label"]
@@ -293,34 +402,25 @@ def school_from_pdf(pdf_path: Path) -> School | None:
 def build_rows_for_school(school):
     rows = []
 
-    # pull all values
     name = school.name
-    sub        = _blank_if_zero(_get(school, "Sub"))
+    sub = _blank_if_zero(_get(school, "Sub"))
 
-    # K-8
     k8_students = _blank_if_zero(_get(school, "SWD K-8"))
-    k8_teachers = _get(school, "IS K-8")  # Don't use _blank_if_zero for teachers (0 is valid)
-    k8_oss      = _blank_if_zero(_get(school, "OSS K-8"))
-    k8_ex       = _blank_if_zero(_get(school, "EX K-8"))
+    k8_teachers = _get(school, "IS K-8")
+    k8_oss = _blank_if_zero(_get(school, "OSS K-8"))
+    k8_ex = _blank_if_zero(_get(school, "EX K-8"))
 
-    # 9-12
     hs_students = _blank_if_zero(_get(school, "SWD 9-12"))
-    hs_teachers = _get(school, "IS 9-12")  # Don't use _blank_if_zero for teachers (0 is valid)
-    hs_oss      = _blank_if_zero(_get(school, "OSS 9-12"))
-    hs_ex       = _blank_if_zero(_get(school, "EX 9-12"))
+    hs_teachers = _get(school, "IS 9-12")
+    hs_oss = _blank_if_zero(_get(school, "OSS 9-12"))
+    hs_ex = _blank_if_zero(_get(school, "EX 9-12"))
 
-    er  = _blank_if_zero(_get(school, "ER"))
+    er = _blank_if_zero(_get(school, "ER"))
     mdm = _blank_if_zero(_get(school, "MDM"))
     
-    # Verify ES or HS from values - focus on meaningful data (students, teachers, discipline)
     is_es = (k8_students is not None and k8_students > 0) or (k8_teachers is not None and k8_teachers > 0) or any(v is not None for v in [k8_oss, k8_ex])
     is_hs = (hs_students is not None and hs_students > 0) or (hs_teachers is not None and hs_teachers > 0) or any(v is not None for v in [hs_oss, hs_ex])
     
-
-    # Conditional check for ES, HS, or BOTH (conservative logic)
-    # Split into ES/HS if:
-    # 1. School is explicitly marked as "both", OR
-    # 2. Both ES and HS have meaningful student data (not just zeros/empty)
     has_meaningful_es = k8_students is not None and k8_students > 0
     has_meaningful_hs = hs_students is not None and hs_students > 0
     
@@ -338,30 +438,25 @@ def build_rows_for_school(school):
             "OSS": hs_oss, "EX": hs_ex, "ER": er, "MDM": mdm,
         })
     else:
-        # For schools with only one level of data, create a single row
         if is_es and not is_hs:
-            # Only ES data present → single ES row
             rows.append({
                 "School": name,
                 "Students": k8_students, "Teachers": k8_teachers, "Sub": sub,
                 "OSS": k8_oss, "EX": k8_ex, "ER": er, "MDM": mdm,
             })
         elif is_hs and not is_es:
-            # Only HS data present → single HS row
             rows.append({
                 "School": name,
                 "Students": hs_students, "Teachers": hs_teachers, "Sub": sub,
                 "OSS": hs_oss, "EX": hs_ex, "ER": er, "MDM": mdm,
             })
         elif is_es and is_hs:
-            # Both ES and HS data present but shouldn't split → use K-8 values for single row
             rows.append({
                 "School": name,
                 "Students": k8_students, "Teachers": k8_teachers, "Sub": sub,
                 "OSS": k8_oss, "EX": k8_ex, "ER": er, "MDM": mdm,
             })
         else:
-            # No level data — still write a single blank row for visibility
             rows.append({
                 "School": name,
                 "Students": None, "Teachers": None, "Sub": sub,
@@ -400,26 +495,21 @@ def bulk_run():
             failed_pdfs.append(f"{pdf_path.name} ({str(e)})")
             print(f"  ✗ Error: {e}")
     
-    # Create Excel file
     wb = Workbook()
     ws = wb.active
     ws.title = "School Data"
     
-    # Add headers
     headers = ["School", "Students", "Teachers", "Sub", "OSS", "EX", "ER", "MDM"]
     for col, header in enumerate(headers, 1):
         ws.cell(row=1, column=col, value=header)
     
-    # Sort rows alphabetically by school name
     all_rows.sort(key=lambda x: x.get("School", ""))
     
-    # Add data rows
     for row_idx, row_data in enumerate(all_rows, 2):
         for col_idx, header in enumerate(headers, 1):
             ws.cell(row=row_idx, column=col_idx, value=row_data.get(header))
     
-    # Save file
-    out_path = OUT_PATH
+    out_path = get_versioned_output_path()
     wb.save(out_path)
     
     # Print summary

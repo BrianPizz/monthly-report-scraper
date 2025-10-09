@@ -1,5 +1,6 @@
 # School data directories
 SeptemberMR2025/
+SeptemberMR2025complete/
 files/
 */MR2025/
 */MR2026/
@@ -34,3 +35,4 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+

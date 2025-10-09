@@ -3,10 +3,18 @@ from pymupdf import pymupdf
 from pathlib import Path
 from openpyxl import Workbook
 from openpyxl import load_workbook
+from datetime import datetime
 
 BASE_DIR = Path(__file__).parent
 PDF_PATH = BASE_DIR / "files" / "BRIAN School Leader Monthly Report 2025-26.pdf"
-OUT_PATH = Path("test.xlsx")
+
+# Generate versioned output file with timestamp
+def get_versioned_output_path():
+    """Generate a unique output file path with timestamp."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return BASE_DIR / f"individual_report_data_{timestamp}.xlsx"
+
+OUT_PATH = get_versioned_output_path()
 
 doc =  pymupdf.open(PDF_PATH)
 
