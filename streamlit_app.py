@@ -96,16 +96,61 @@ def main():
             
             # Expand ZIPs into PDFs, keep PDFs as-is
             expanded_files = []
+            
             if uploaded_files:
                 for uf in uploaded_files:
                     name_lower = uf.name.lower()
                     if name_lower.endswith('.zip'):
                         try:
-                            zf = zipfile.ZipFile(io.BytesIO(uf.getbuffer().getvalue()))
+                            # Read ZIP file content
+                            # Convert memoryview to bytes, then to BytesIO
+                            zip_bytes = bytes(uf.getbuffer())
+                            zip_buffer = io.BytesIO(zip_bytes)
+                            zf = zipfile.ZipFile(zip_buffer)
+                            
+                            # Count PDFs in ZIP, filtering out directories and duplicates
+                            # Use a set to track filenames we've already processed to avoid duplicates
+                            seen_filenames = set()
+                            pdf_members = []
+                            
                             for member in zf.namelist():
+                                # Skip directories
+                                if member.endswith('/'):
+                                    continue
+                                
+                                # Get just the filename (not the full path)
+                                filename = Path(member).name
+                                
+                                # Skip macOS resource fork files (start with ._)
+                                if filename.startswith('._'):
+                                    continue
+                                
+                                # Skip other macOS system files
+                                if filename == '.DS_Store':
+                                    continue
+                                
+                                # Only process PDF files
                                 if member.lower().endswith('.pdf'):
+                                    # Only add if we haven't seen this filename before
+                                    if filename not in seen_filenames:
+                                        pdf_members.append(member)
+                                        seen_filenames.add(filename)
+                            
+                            if not pdf_members:
+                                st.warning(f"⚠️ {uf.name}: No PDF files found in ZIP")
+                            else:
+                                extracted_count = 0
+                                for member in pdf_members:
                                     try:
+                                        # Check if this is actually a file (not a directory)
+                                        member_info = zf.getinfo(member)
+                                        if member_info.is_dir():
+                                            continue
+                                        
                                         pdf_bytes = zf.read(member)
+                                        if len(pdf_bytes) == 0:
+                                            continue
+                                        
                                         # Mimic Streamlit UploadedFile
                                         class MockUploadedFile:
                                             def __init__(self, name, data_bytes):
@@ -113,18 +158,39 @@ def main():
                                                 self._data = data_bytes
                                             def getbuffer(self):
                                                 return io.BytesIO(self._data)
+                                        
+                                        filename = Path(member).name
                                         expanded_files.append(
-                                            MockUploadedFile(Path(member).name, pdf_bytes)
+                                            MockUploadedFile(filename, pdf_bytes)
                                         )
-                                    except Exception:
-                                        pass
-                        except Exception:
-                            pass
+                                        extracted_count += 1
+                                    except Exception as e:
+                                        st.error(f"❌ Error extracting {member} from {uf.name}: {str(e)}")
+                                
+                                if extracted_count > 0:
+                                    st.success(f"✅ {uf.name}: Extracted {extracted_count} PDF file(s)")
+                                else:
+                                    st.warning(f"⚠️ {uf.name}: Could not extract any PDF files")
+                            
+                            zf.close()
+                            
+                        except zipfile.BadZipFile:
+                            st.error(f"❌ {uf.name}: Invalid or corrupted ZIP file")
+                        except Exception as e:
+                            st.error(f"❌ Error processing ZIP file {uf.name}: {str(e)}")
+                            if verbose_mode:
+                                st.exception(e)
                     elif name_lower.endswith('.pdf'):
                         expanded_files.append(uf)
             
             # Store in session state
-            st.session_state.uploaded_files = expanded_files if expanded_files else []
+            if expanded_files:
+                st.session_state.uploaded_files = expanded_files
+                st.info(f"📁 Ready to process {len(expanded_files)} file(s)")
+            else:
+                st.session_state.uploaded_files = []
+                if uploaded_files:
+                    st.warning("⚠️ No valid PDF files found. Please check your uploads.")
             
         else:  # Folder Upload
             st.info("Upload a folder containing PDF files")
@@ -341,8 +407,8 @@ def main():
                     st.sidebar.write(f"Testing: {test_file.name}")
                     
                     # Test if we can read the file
-                    file_data = test_file.getbuffer()
-                    st.sidebar.write(f"File size: {len(file_data.getvalue())} bytes")
+                    file_data = bytes(test_file.getbuffer())
+                    st.sidebar.write(f"File size: {len(file_data)} bytes")
                     
                     # Test if main.py functions are importable
                     try:
@@ -407,7 +473,14 @@ def process_files(uploaded_files, verbose_mode, use_ocr):
                     # Save uploaded file to temporary location
                     temp_pdf_path = temp_path / uploaded_file.name
                     with open(temp_pdf_path, "wb") as f:
-                        f.write(uploaded_file.getbuffer().getvalue())
+                        # Handle both real UploadedFile (memoryview) and MockUploadedFile (BytesIO)
+                        buffer = uploaded_file.getbuffer()
+                        if isinstance(buffer, io.BytesIO):
+                            # MockUploadedFile returns BytesIO
+                            f.write(buffer.getvalue())
+                        else:
+                            # Real UploadedFile returns memoryview
+                            f.write(bytes(buffer))
                     
                     # Check if file was saved correctly
                     if not temp_pdf_path.exists():
