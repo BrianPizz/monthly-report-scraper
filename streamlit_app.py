@@ -75,273 +75,269 @@ def main():
         st.subheader("Processing Options")
         verbose_mode = st.checkbox("Verbose Mode", help="Show detailed processing information")
         use_ocr = st.checkbox("Use OCR Processing", value=True, help="Use OCR for better text extraction")
-        
-        st.subheader("📁 File Management")
-        
-        # Upload method selection
-        upload_method = st.radio(
-            "Choose upload method:",
-            ["📄 Individual Files", "📁 Folder Upload"],
-            help="Select how you want to upload your PDF files"
-        )
-        
-        if upload_method == "📄 Individual Files":
-            st.info("Upload individual PDF files")
-            uploaded_files = st.file_uploader(
-                "Choose PDF files (or a ZIP with PDFs)",
-                type=['pdf', 'zip'],
-                accept_multiple_files=True,
-                help="Upload one or more PDF files containing school monthly reports"
-            )
-            
-            # Expand ZIPs into PDFs, keep PDFs as-is
-            expanded_files = []
-            
-            if uploaded_files:
-                for uf in uploaded_files:
-                    name_lower = uf.name.lower()
-                    if name_lower.endswith('.zip'):
-                        try:
-                            # Read ZIP file content
-                            # Convert memoryview to bytes, then to BytesIO
-                            zip_bytes = bytes(uf.getbuffer())
-                            zip_buffer = io.BytesIO(zip_bytes)
-                            zf = zipfile.ZipFile(zip_buffer)
-                            
-                            # Count PDFs in ZIP, filtering out directories and duplicates
-                            # Use a set to track filenames we've already processed to avoid duplicates
-                            seen_filenames = set()
-                            pdf_members = []
-                            
-                            for member in zf.namelist():
-                                # Skip directories
-                                if member.endswith('/'):
-                                    continue
-                                
-                                # Get just the filename (not the full path)
-                                filename = Path(member).name
-                                
-                                # Skip macOS resource fork files (start with ._)
-                                if filename.startswith('._'):
-                                    continue
-                                
-                                # Skip other macOS system files
-                                if filename == '.DS_Store':
-                                    continue
-                                
-                                # Only process PDF files
-                                if member.lower().endswith('.pdf'):
-                                    # Only add if we haven't seen this filename before
-                                    if filename not in seen_filenames:
-                                        pdf_members.append(member)
-                                        seen_filenames.add(filename)
-                            
-                            if not pdf_members:
-                                st.warning(f"⚠️ {uf.name}: No PDF files found in ZIP")
-                            else:
-                                extracted_count = 0
-                                for member in pdf_members:
-                                    try:
-                                        # Check if this is actually a file (not a directory)
-                                        member_info = zf.getinfo(member)
-                                        if member_info.is_dir():
-                                            continue
-                                        
-                                        pdf_bytes = zf.read(member)
-                                        if len(pdf_bytes) == 0:
-                                            continue
-                                        
-                                        # Mimic Streamlit UploadedFile
-                                        class MockUploadedFile:
-                                            def __init__(self, name, data_bytes):
-                                                self.name = name
-                                                self._data = data_bytes
-                                            def getbuffer(self):
-                                                return io.BytesIO(self._data)
-                                        
-                                        filename = Path(member).name
-                                        expanded_files.append(
-                                            MockUploadedFile(filename, pdf_bytes)
-                                        )
-                                        extracted_count += 1
-                                    except Exception as e:
-                                        st.error(f"❌ Error extracting {member} from {uf.name}: {str(e)}")
-                                
-                                if extracted_count > 0:
-                                    st.success(f"✅ {uf.name}: Extracted {extracted_count} PDF file(s)")
-                                else:
-                                    st.warning(f"⚠️ {uf.name}: Could not extract any PDF files")
-                            
-                            zf.close()
-                            
-                        except zipfile.BadZipFile:
-                            st.error(f"❌ {uf.name}: Invalid or corrupted ZIP file")
-                        except Exception as e:
-                            st.error(f"❌ Error processing ZIP file {uf.name}: {str(e)}")
-                            if verbose_mode:
-                                st.exception(e)
-                    elif name_lower.endswith('.pdf'):
-                        expanded_files.append(uf)
-            
-            # Store in session state
-            if expanded_files:
-                st.session_state.uploaded_files = expanded_files
-                st.info(f"📁 Ready to process {len(expanded_files)} file(s)")
-            else:
-                st.session_state.uploaded_files = []
-                if uploaded_files:
-                    st.warning("⚠️ No valid PDF files found. Please check your uploads.")
-            
-        else:  # Folder Upload
-            st.info("Upload a folder containing PDF files")
-            
-            # Multiple ways to select folders
-            st.subheader("🔍 Choose Folder Selection Method")
-            
-            folder_method = st.radio(
-                "How would you like to select your folder?",
-                ["📂 Quick Access (Recommended)", "📁 Browse Common Locations", "⌨️ Manual Path Entry"],
-                horizontal=True
-            )
-            
-            folder_path = None
-            
-            if folder_method == "📂 Quick Access (Recommended)":
-                st.markdown("**Quick access to common PDF folders:**")
-                
-                # Quick access buttons for common locations
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    if st.button("📁 Current Project Folder", use_container_width=True):
-                        folder_path = Path("SeptemberMR2025complete")
-                
-                with col2:
-                    if st.button("📁 Files Directory", use_container_width=True):
-                        folder_path = Path("files")
-                
-                with col3:
-                    if st.button("📁 Desktop", use_container_width=True):
-                        folder_path = Path.home() / "Desktop"
-                
-                # Show current working directory
-                st.info(f"💡 **Current directory:** `{Path.cwd()}`")
-                
-                # Allow user to enter a relative path from current directory
-                relative_path = st.text_input(
-                    "Or enter a relative path from current directory:",
-                    placeholder="e.g., 'SeptemberMR2025complete' or 'files'",
-                    help="Enter a folder name or path relative to the current directory"
-                )
-                
-                if relative_path:
-                    folder_path = Path(relative_path)
-            
-            elif folder_method == "📁 Browse Common Locations":
-                st.markdown("**Browse common system locations:**")
-                
-                # Common system paths
-                common_paths = {
-                    "🏠 Home Directory": str(Path.home()),
-                    "📁 Desktop": str(Path.home() / "Desktop"),
-                    "📁 Documents": str(Path.home() / "Documents"),
-                    "📁 Downloads": str(Path.home() / "Downloads"),
-                    "📁 Current Project": str(Path.cwd()),
-                    "📁 Project Files": str(Path.cwd() / "files"),
-                    "📁 September Reports": str(Path.cwd() / "SeptemberMR2025complete")
-                }
-                
-                selected_path = st.selectbox(
-                    "Choose a common location:",
-                    list(common_paths.keys()),
-                    help="Select from common system locations"
-                )
-                
-                if selected_path:
-                    base_path = Path(common_paths[selected_path])
+    
+    # Main content area - Drag and Drop Upload (Primary Method)
+    st.header("📤 Upload Files")
+    st.markdown("**Drag and drop your PDF files or ZIP folder here, or click to browse**")
+    
+    # Large, prominent file uploader in main area
+    uploaded_files = st.file_uploader(
+        "Upload PDF files or ZIP folders",
+        type=['pdf', 'zip'],
+        accept_multiple_files=True,
+        help="Upload one or more PDF files or a ZIP folder containing PDF files",
+        label_visibility="collapsed"
+    )
+    
+    # Expand ZIPs into PDFs, keep PDFs as-is
+    expanded_files = []
+    
+    if uploaded_files:
+        for uf in uploaded_files:
+            name_lower = uf.name.lower()
+            if name_lower.endswith('.zip'):
+                try:
+                    # Read ZIP file content
+                    # Convert memoryview to bytes, then to BytesIO
+                    zip_bytes = bytes(uf.getbuffer())
+                    zip_buffer = io.BytesIO(zip_bytes)
+                    zf = zipfile.ZipFile(zip_buffer)
                     
-                    if base_path.exists():
-                        # Show subdirectories if any
-                        try:
-                            subdirs = [d for d in base_path.iterdir() if d.is_dir()]
-                            if subdirs:
-                                st.write("**Available subdirectories:**")
-                                subdir_names = [d.name for d in subdirs]
-                                selected_subdir = st.selectbox(
-                                    "Choose subdirectory (optional):",
-                                    ["None"] + subdir_names
-                                )
-                                
-                                if selected_subdir != "None":
-                                    folder_path = base_path / selected_subdir
-                                else:
-                                    folder_path = base_path
-                            else:
-                                folder_path = base_path
-                        except PermissionError:
-                            st.error("❌ Permission denied to access this location")
-                            folder_path = None
+                    # Count PDFs in ZIP, filtering out directories and duplicates
+                    # Use a set to track filenames we've already processed to avoid duplicates
+                    seen_filenames = set()
+                    pdf_members = []
+                    
+                    for member in zf.namelist():
+                        # Skip directories
+                        if member.endswith('/'):
+                            continue
+                        
+                        # Get just the filename (not the full path)
+                        filename = Path(member).name
+                        
+                        # Skip macOS resource fork files (start with ._)
+                        if filename.startswith('._'):
+                            continue
+                        
+                        # Skip other macOS system files
+                        if filename == '.DS_Store':
+                            continue
+                        
+                        # Only process PDF files
+                        if member.lower().endswith('.pdf'):
+                            # Only add if we haven't seen this filename before
+                            if filename not in seen_filenames:
+                                pdf_members.append(member)
+                                seen_filenames.add(filename)
+                    
+                    if not pdf_members:
+                        st.warning(f"⚠️ {uf.name}: No PDF files found in ZIP")
                     else:
-                        st.error(f"❌ Path does not exist: {base_path}")
-                        folder_path = None
-            else:  # Manual Path Entry
-                st.markdown("**Manual path entry:**")
-                folder_path = st.text_input(
-                    "Enter full folder path:",
-                    placeholder="/Users/username/Desktop/MyPDFs",
-                    help="Enter the complete path to your PDF folder"
-                )
-                
-                if folder_path:
-                    folder_path = Path(folder_path)
-            
-            # Process the selected folder
-            uploaded_files = []  # Initialize empty list for folder upload
-            
-            if folder_path:
-                folder_path = Path(folder_path)
-                if folder_path.exists() and folder_path.is_dir():
-                    # Find all PDF files in the folder
-                    pdf_files = list(folder_path.glob("*.pdf"))
-                    if pdf_files:
-                        st.success(f"✅ Found {len(pdf_files)} PDF files in: `{folder_path}`")
-                        
-                        # Show file list preview
-                        with st.expander(f"📋 Preview {len(pdf_files)} files found"):
-                            for i, pdf_file in enumerate(pdf_files[:10]):  # Show first 10
-                                st.write(f"{i+1}. {pdf_file.name}")
-                            if len(pdf_files) > 10:
-                                st.write(f"... and {len(pdf_files) - 10} more files")
-                        
-                        # Create file-like objects for each PDF
-                        for pdf_file in pdf_files:
+                        extracted_count = 0
+                        for member in pdf_members:
                             try:
-                                with open(pdf_file, 'rb') as f:
-                                    file_data = f.read()
+                                # Check if this is actually a file (not a directory)
+                                member_info = zf.getinfo(member)
+                                if member_info.is_dir():
+                                    continue
                                 
-                                # Create a file-like object that mimics uploaded file
+                                pdf_bytes = zf.read(member)
+                                if len(pdf_bytes) == 0:
+                                    continue
+                                
+                                # Mimic Streamlit UploadedFile
                                 class MockUploadedFile:
-                                    def __init__(self, name, data):
+                                    def __init__(self, name, data_bytes):
                                         self.name = name
-                                        self._data = data
-                                    
+                                        self._data = data_bytes
                                     def getbuffer(self):
                                         return io.BytesIO(self._data)
                                 
-                                uploaded_files.append(MockUploadedFile(pdf_file.name, file_data))
-                                
+                                filename = Path(member).name
+                                expanded_files.append(
+                                    MockUploadedFile(filename, pdf_bytes)
+                                )
+                                extracted_count += 1
                             except Exception as e:
-                                st.error(f"Error reading {pdf_file.name}: {e}")
+                                st.error(f"❌ Error extracting {member} from {uf.name}: {str(e)}")
                         
-                        # Store in session state
-                        st.session_state.uploaded_files = uploaded_files
-                    else:
-                        st.warning(f"⚠️ No PDF files found in: `{folder_path}`")
-                        st.info("💡 Make sure the folder contains PDF files with `.pdf` extension")
-                        st.session_state.uploaded_files = []
+                        if extracted_count > 0:
+                            st.success(f"✅ {uf.name}: Extracted {extracted_count} PDF file(s)")
+                        else:
+                            st.warning(f"⚠️ {uf.name}: Could not extract any PDF files")
+                    
+                    zf.close()
+                    
+                except zipfile.BadZipFile:
+                    st.error(f"❌ {uf.name}: Invalid or corrupted ZIP file")
+                except Exception as e:
+                    st.error(f"❌ Error processing ZIP file {uf.name}: {str(e)}")
+                    if verbose_mode:
+                        st.exception(e)
+            elif name_lower.endswith('.pdf'):
+                expanded_files.append(uf)
+    
+    # Store in session state
+    if expanded_files:
+        st.session_state.uploaded_files = expanded_files
+        st.success(f"✅ Ready to process {len(expanded_files)} file(s)")
+    else:
+        st.session_state.uploaded_files = []
+        if uploaded_files:
+            st.warning("⚠️ No valid PDF files found. Please check your uploads.")
+    
+    # Folder Upload - Secondary Option (Collapsed by default)
+    with st.expander("📁 Alternative: Select from Folder (Advanced)", expanded=False):
+        st.info("If you prefer to select files from a folder on your computer instead of drag & drop, use this option.")
+        
+        # Multiple ways to select folders
+        st.subheader("🔍 Choose Folder Selection Method")
+        
+        folder_method = st.radio(
+            "How would you like to select your folder?",
+            ["📂 Quick Access (Recommended)", "📁 Browse Common Locations", "⌨️ Manual Path Entry"],
+            horizontal=True
+        )
+        
+        folder_path = None
+        
+        if folder_method == "📂 Quick Access (Recommended)":
+            st.markdown("**Quick access to common PDF folders:**")
+            
+            # Quick access buttons for common locations
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("📁 Current Project Folder", use_container_width=True):
+                    folder_path = Path("SeptemberMR2025complete")
+            
+            with col2:
+                if st.button("📁 Files Directory", use_container_width=True):
+                    folder_path = Path("files")
+            
+            with col3:
+                if st.button("📁 Desktop", use_container_width=True):
+                    folder_path = Path.home() / "Desktop"
+            
+            # Show current working directory
+            st.info(f"💡 **Current directory:** `{Path.cwd()}`")
+            
+            # Allow user to enter a relative path from current directory
+            relative_path = st.text_input(
+                "Or enter a relative path from current directory:",
+                placeholder="e.g., 'SeptemberMR2025complete' or 'files'",
+                help="Enter a folder name or path relative to the current directory"
+            )
+            
+            if relative_path:
+                folder_path = Path(relative_path)
+        
+        elif folder_method == "📁 Browse Common Locations":
+            st.markdown("**Browse common system locations:**")
+            
+            # Common system paths
+            common_paths = {
+                "🏠 Home Directory": str(Path.home()),
+                "📁 Desktop": str(Path.home() / "Desktop"),
+                "📁 Documents": str(Path.home() / "Documents"),
+                "📁 Downloads": str(Path.home() / "Downloads"),
+                "📁 Current Project": str(Path.cwd()),
+                "📁 Project Files": str(Path.cwd() / "files"),
+                "📁 September Reports": str(Path.cwd() / "SeptemberMR2025complete")
+            }
+            
+            selected_path = st.selectbox(
+                "Choose a common location:",
+                list(common_paths.keys()),
+                help="Select from common system locations"
+            )
+            
+            if selected_path:
+                base_path = Path(common_paths[selected_path])
+                
+                if base_path.exists():
+                    # Show subdirectories if any
+                    try:
+                        subdirs = [d for d in base_path.iterdir() if d.is_dir()]
+                        if subdirs:
+                            st.write("**Available subdirectories:**")
+                            subdir_names = [d.name for d in subdirs]
+                            selected_subdir = st.selectbox(
+                                "Choose subdirectory (optional):",
+                                ["None"] + subdir_names
+                            )
+                            
+                            if selected_subdir != "None":
+                                folder_path = base_path / selected_subdir
+                            else:
+                                folder_path = base_path
+                        else:
+                            folder_path = base_path
+                    except PermissionError:
+                        st.error("❌ Permission denied to access this location")
+                        folder_path = None
                 else:
-                    st.error(f"❌ Invalid path or folder does not exist: `{folder_path}`")
-                    st.session_state.uploaded_files = []
+                    st.error(f"❌ Path does not exist: {base_path}")
+                    folder_path = None
+        else:  # Manual Path Entry
+            st.markdown("**Manual path entry:**")
+            folder_path = st.text_input(
+                "Enter full folder path:",
+                placeholder="/Users/username/Desktop/MyPDFs",
+                help="Enter the complete path to your PDF folder"
+            )
+            
+            if folder_path:
+                folder_path = Path(folder_path)
+        
+        # Process the selected folder
+        folder_uploaded_files = []  # Initialize empty list for folder upload
+        
+        if folder_path:
+            folder_path = Path(folder_path)
+            if folder_path.exists() and folder_path.is_dir():
+                # Find all PDF files in the folder
+                pdf_files = list(folder_path.glob("*.pdf"))
+                if pdf_files:
+                    st.success(f"✅ Found {len(pdf_files)} PDF files in: `{folder_path}`")
+                    
+                    # Show file list preview
+                    with st.expander(f"📋 Preview {len(pdf_files)} files found"):
+                        for i, pdf_file in enumerate(pdf_files[:10]):  # Show first 10
+                            st.write(f"{i+1}. {pdf_file.name}")
+                        if len(pdf_files) > 10:
+                            st.write(f"... and {len(pdf_files) - 10} more files")
+                    
+                    # Create file-like objects for each PDF
+                    for pdf_file in pdf_files:
+                        try:
+                            with open(pdf_file, 'rb') as f:
+                                file_data = f.read()
+                            
+                            # Create a file-like object that mimics uploaded file
+                            class MockUploadedFile:
+                                def __init__(self, name, data):
+                                    self.name = name
+                                    self._data = data
+                                
+                                def getbuffer(self):
+                                    return io.BytesIO(self._data)
+                            
+                            folder_uploaded_files.append(MockUploadedFile(pdf_file.name, file_data))
+                            
+                        except Exception as e:
+                            st.error(f"Error reading {pdf_file.name}: {e}")
+                    
+                    # Store in session state (only if folder upload was used)
+                    if folder_uploaded_files:
+                        st.session_state.uploaded_files = folder_uploaded_files
+                        st.success(f"✅ Ready to process {len(folder_uploaded_files)} file(s) from folder")
+                else:
+                    st.warning(f"⚠️ No PDF files found in: `{folder_path}`")
+                    st.info("💡 Make sure the folder contains PDF files with `.pdf` extension")
+            else:
+                st.error(f"❌ Invalid path or folder does not exist: `{folder_path}`")
     
     # Main content area
     col1, col2 = st.columns([2, 1])
@@ -368,7 +364,7 @@ def main():
                 else:
                     st.error("❌ No files to process. Please upload files first.")
         else:
-            st.info("👆 Please upload PDF files using the sidebar to get started")
+            st.info("👆 Please drag and drop PDF files or a ZIP folder above to get started")
     
     with col2:
         st.header("📊 Quick Stats")
