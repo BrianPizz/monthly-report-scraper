@@ -23,7 +23,7 @@ from main import (
 
 # Page configuration
 st.set_page_config(
-    page_title="Monthly Report Scraper",
+    page_title="OH SPED Monthly Report Scraper",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -64,7 +64,7 @@ st.markdown("""
 
 def main():
     # Header
-    st.markdown('<h1 class="main-header">📊 Monthly Report Scraper</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Ohio SPED Monthly Report Scraper</h1>', unsafe_allow_html=True)
     st.markdown("---")
     
     # Sidebar
@@ -444,6 +444,31 @@ def process_files(uploaded_files, verbose_mode, use_ocr):
         st.error("❌ No files to process!")
         return
     
+    # Display loading GIF
+    gif_container = st.empty()
+    
+    # Simple approach: Use a direct GIF URL (must end in .gif)
+    # Examples:
+    # - Imgur: "https://i.imgur.com/example.gif"
+    # - Giphy direct: "https://media.giphy.com/media/example/giphy.gif"
+    # - Any direct .gif URL
+    loading_gif_url = "https://media1.tenor.com/m/pR1FSngr_3sAAAAd/were-here-john-david-washington.gif"
+    
+    # Or use a local file (place loading.gif in project root)
+    loading_gif_path = Path("loading.gif")
+    
+    try:
+        if loading_gif_path.exists():
+            gif_container.image(str(loading_gif_path), width=600)
+        elif loading_gif_url:
+            gif_container.image(loading_gif_url, width=600)
+        else:
+            gif_container.markdown("🔄 **Processing...**")
+    except Exception as e:
+        gif_container.markdown("🔄 **Processing...**")
+        if verbose_mode:
+            st.warning(f"Could not load GIF: {e}")
+    
     progress_bar = st.progress(0)
     status_text = st.empty()
     
@@ -510,6 +535,7 @@ def process_files(uploaded_files, verbose_mode, use_ocr):
                         st.info("💡 Enable 'Verbose Mode' in sidebar to see detailed error information")
     
     except Exception as e:
+        gif_container.empty()
         st.error(f"❌ Critical error during processing: {e}")
         if verbose_mode:
             st.exception(e)
@@ -518,6 +544,9 @@ def process_files(uploaded_files, verbose_mode, use_ocr):
     # Update progress to complete
     progress_bar.progress(1.0)
     status_text.text("Processing complete!")
+    
+    # Clear loading GIF
+    gif_container.empty()
     
     # Store results in session state
     st.session_state.processed_data = all_rows
