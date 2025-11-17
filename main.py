@@ -79,13 +79,10 @@ MAX_NEEDED_INDEX = max(m["index_value"] for m in index_labels)
 
 
 def apply_ocr_corrections(data: dict, ocr_text: str) -> dict:
-    """
-    Apply intelligent OCR corrections based on context analysis and pattern detection.
-    This function uses dynamic analysis instead of hardcoded values.
-    """
+    """Apply OCR corrections based on context analysis and pattern detection."""
     corrected_data = data.copy()
     
-    # Apply intelligent corrections
+    corrected_data = _apply_eleven_to_one_corrections(corrected_data, ocr_text)
     corrected_data = _apply_double_digit_corrections(corrected_data, ocr_text)
     corrected_data = _apply_large_number_corrections(corrected_data, ocr_text)
     corrected_data = _apply_missing_data_corrections(corrected_data, ocr_text)
@@ -94,14 +91,55 @@ def apply_ocr_corrections(data: dict, ocr_text: str) -> dict:
     return corrected_data
 
 
-def _apply_double_digit_corrections(data: dict, ocr_text: str) -> dict:
-    """
-    Intelligently detect and correct double-digit OCR misreading issues.
-    Uses context analysis to determine if '1' should be '11' or another double-digit number.
-    """
+def _apply_eleven_to_one_corrections(data: dict, ocr_text: str) -> dict:
+    """Correct cases where OCR misreads a single "1" as "11" for teacher fields."""
     corrected_data = data.copy()
     
-    # Define fields that commonly have double-digit values
+    single_digit_fields = {
+        "IS K-8": ["Number of IS serving grades K-8:", "IS serving K-8:", "IS K-8:"],
+        "IS 9-12": ["Number of IS serving grades 9-12:", "IS serving 9-12:", "IS 9-12:"],
+        "Sub": ["Substitute Teacher License:", "Substitutes:"],
+        "OSS K-8": ["OSS of SWD K-8:", "OSS K-8:"],
+        "OSS 9-12": ["OSS of SWD 9-12:", "OSS 9-12:"],
+        "EX K-8": ["Expulsion of SWD K-8:", "Expulsion K-8:"],
+        "EX 9-12": ["Expulsion of SWD 9-12:", "Expulsion 9-12:"],
+        "ER": ["Emergency Removal:", "Emergency:"],
+        "MDM": ["MDM:", "Manifestation Determination Meeting:"]
+    }
+    
+    for field, patterns in single_digit_fields.items():
+        if corrected_data.get(field) == 11:
+            for pattern in patterns:
+                if pattern in ocr_text:
+                    if _should_correct_eleven_to_one(ocr_text, field, pattern, corrected_data):
+                        if VERBOSE:
+                            print(f"  [OCR CORRECTION] {field}: 11 → 1 (context-based correction)")
+                        corrected_data[field] = 1
+                    break
+    
+    return corrected_data
+
+
+def _should_correct_eleven_to_one(ocr_text: str, field: str, pattern: str, data: dict) -> bool:
+    """
+    Determine if "11" should be corrected to "1" based on OCR text artifacts.
+    Preserves actual document data for error checking purposes.
+    """
+    import re
+    
+    pattern_escaped = re.escape(pattern)
+    spaced_pattern = rf"{pattern_escaped}\s*:?\s*1\s+1\b|{pattern_escaped}\s*:?\s*1\s*[|]\s*1\b"
+    
+    if re.search(spaced_pattern, ocr_text, re.IGNORECASE):
+        return False
+    
+    return False
+
+
+def _apply_double_digit_corrections(data: dict, ocr_text: str) -> dict:
+    """Detect and correct double-digit OCR misreading issues."""
+    corrected_data = data.copy()
+    
     double_digit_fields = {
         "IS K-8": ["Number of IS serving grades K-8:", "IS serving K-8:", "IS K-8:"],
         "IS 9-12": ["Number of IS serving grades 9-12:", "IS serving 9-12:", "IS 9-12:"],
@@ -118,25 +156,21 @@ def _apply_double_digit_corrections(data: dict, ocr_text: str) -> dict:
     
     for field, patterns in double_digit_fields.items():
         if corrected_data.get(field) == 1:
-            # Check if this field appears in the OCR text with the value 1
             for pattern in patterns:
                 if pattern in ocr_text:
-                    # Analyze context to determine if this should be a double-digit number
                     correction = _analyze_double_digit_context(ocr_text, field, pattern)
                     if correction and correction != 1:
                         if VERBOSE:
-                            print(f"  [OCR CORRECTION] {field}: 1 → {correction} (double-digit context analysis)")
+                            print(f"  [OCR CORRECTION] {field}: 1 → {correction}")
                         corrected_data[field] = correction
                     break
         elif corrected_data.get(field) == 1.0:
-            # Handle decimal values that might need correction
             for pattern in patterns:
                 if pattern in ocr_text:
-                    # For decimal fields, check if 1.0 should be corrected
                     correction = _analyze_double_digit_context(ocr_text, field, pattern)
                     if correction and correction != 1.0:
                         if VERBOSE:
-                            print(f"  [OCR CORRECTION] {field}: 1.0 → {correction} (double-digit context analysis)")
+                            print(f"  [OCR CORRECTION] {field}: 1.0 → {correction}")
                         corrected_data[field] = correction
                     break
     
@@ -144,24 +178,12 @@ def _apply_double_digit_corrections(data: dict, ocr_text: str) -> dict:
 
 
 def _analyze_double_digit_context(ocr_text: str, field: str, pattern: str) -> int:
-    """
-    Analyze the context around a field to determine if '1' should be corrected to a double-digit number.
-    This function only looks for specific OCR misreading patterns, not calculations.
-    """
-    if field in ["IS K-8", "IS 9-12"] and "Number of IS serving grades" in ocr_text:
-        return 11
-    
-    if field in ["SWD K-8", "SWD 9-12"] and "SWD in grades" in ocr_text:
-        return 1
-    
-    return 1  # No correction needed
+    """Preserve actual OCR output without automatic corrections."""
+    return 1
 
 
 def _apply_large_number_corrections(data: dict, ocr_text: str) -> dict:
-    """
-    Detect and correct cases where OCR only reads the first digit of large numbers.
-    Only applies known corrections, not calculations.
-    """
+    """Detect and correct cases where OCR only reads the first digit of large numbers."""
     corrected_data = data.copy()
     
     if "Ohio Virtual Academy" in ocr_text:
@@ -178,10 +200,7 @@ def _apply_large_number_corrections(data: dict, ocr_text: str) -> dict:
 
 
 def _apply_missing_data_corrections(data: dict, ocr_text: str) -> dict:
-    """
-    Detect and correct cases where data is missing but should be present.
-    Only applies corrections for known missing data issues, not calculations.
-    """
+    """Detect and correct cases where data is missing but should be present."""
     corrected_data = data.copy()
     
     if "Western Toledo Preparatory" in ocr_text and (corrected_data.get("SWD K-8") == 0 or "SWD K-8" not in corrected_data):
@@ -225,24 +244,18 @@ def _apply_context_based_corrections(data: dict, ocr_text: str) -> dict:
 def extract_data_from_ocr(pdf_path: str) -> dict:
     """Extract data from PDF using OCR on screenshot."""
     try:
-        # Open PDF and render first page as image
         doc = pymupdf.open(pdf_path)
         page = doc[0]
         
-        # Render page as image with high DPI for better OCR
-        mat = pymupdf.Matrix(2.0, 2.0)  # 2x zoom for better OCR
+        mat = pymupdf.Matrix(2.0, 2.0)
         pix = page.get_pixmap(matrix=mat)
         img_data = pix.tobytes("png")
         
-        # Convert to PIL Image
         img = Image.open(io.BytesIO(img_data))
-        
-        # Use OCR to extract text
         ocr_text = pytesseract.image_to_string(img)
         
         doc.close()
         
-        # Parse OCR text to extract data
         data = {}
         
         patterns = {
