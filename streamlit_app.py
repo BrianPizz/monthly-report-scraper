@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import os
 import zipfile
+import random
 
 import pytesseract
 from PIL import Image
@@ -447,15 +448,13 @@ def process_files(uploaded_files, verbose_mode, use_ocr):
     # Display loading GIF
     gif_container = st.empty()
     
-    # Simple approach: Use a direct GIF URL (must end in .gif)
-    # Examples:
-    # - Imgur: "https://i.imgur.com/example.gif"
-    # - Giphy direct: "https://media.giphy.com/media/example/giphy.gif"
-    # - Any direct .gif URL
-    loading_gif_url = "https://media1.tenor.com/m/pR1FSngr_3sAAAAd/were-here-john-david-washington.gif"
+    # Use a direct GIF URL (must end in .gif)
+    loading_gif_url_list = ["https://media1.tenor.com/m/pR1FSngr_3sAAAAd/were-here-john-david-washington.gif", "https://giffiles.alphacoders.com/221/221681.gif", "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExNDcxY2gwMnY3d29wOWM0dm1pNDVpZ2ZkY2NyM3FyNm4zcDFkbW41ZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/mCqOIwWNnqwdJUn4FW/giphy.gif", "https://media1.tenor.com/m/6tVFJnLL3q0AAAAd/matrix-fight.gif", "https://media1.tenor.com/m/FDkNs-UIqxkAAAAC/bane-batman.gif", "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExa3M5eXU3M2JpdWtpZGc3eGM3aW9hbTd3aGc1cGF1NGxoejZuY3piMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/RLnTaVfBJ7Sxv5mIVg/giphy.gif"]
     
     # Or use a local file (place loading.gif in project root)
     loading_gif_path = Path("loading.gif")
+
+    loading_gif_url = random.choice(loading_gif_url_list)
     
     try:
         if loading_gif_path.exists():
