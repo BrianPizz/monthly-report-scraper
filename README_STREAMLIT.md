@@ -4,27 +4,7 @@ A web-based interface for processing school monthly report PDFs using Streamlit.
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Run the Streamlit App
-
-**Option A: Using the run script**
-```bash
-python run_app.py
-```
-
-**Option B: Direct Streamlit command**
-```bash
-streamlit run streamlit_app.py
-```
-
-### 3. Access the App
-
-The app will automatically open in your browser at: http://localhost:8501
+Link to deployment [https://ohio-sped-monthly-report-scraper.streamlit.app/]
 
 ## 📱 Features
 
