@@ -4,7 +4,7 @@ A web-based interface for processing school monthly report PDFs using Streamlit.
 
 ## 🚀 Quick Start
 
-Link to deployment [https://ohio-sped-monthly-report-scraper.streamlit.app/]
+[Link to deployment] (https://ohio-sped-monthly-report-scraper.streamlit.app/)
 
 ## 📱 Features
 
